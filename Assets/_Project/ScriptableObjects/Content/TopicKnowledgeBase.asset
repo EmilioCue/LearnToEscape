@@ -12,5 +12,79 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fbef8ce39f706bd44b7627e4aacd48ec, type: 3}
   m_Name: TopicKnowledgeBase
   m_EditorClassIdentifier: Assembly-CSharp::LearnToEscape.Content.TopicKnowledgeBase
-  topicName: 
-  factualContext: 
+  topicName: Arquitectura de Computadores
+  factualContext: "## **1. Modelos Arquitect\xF3nicos Fundamentales**\n\n* **Arquitectura
+    de Von Neumann:**\n    * **Definici\xF3n:** Dise\xF1o te\xF3rico de un computador
+    donde los datos y las instrucciones del programa comparten el mismo espacio de
+    memoria y los mismos buses de comunicaci\xF3n.\n    * **Hecho clave:** Sufre
+    del \"Cuello de botella de Von Neumann\", que es la limitaci\xF3n en la tasa
+    de transferencia de datos entre la CPU y la memoria debido al bus compartido.\n*
+    **Arquitectura Harvard:**\n    * **Definici\xF3n:** Dise\xF1o que utiliza memorias
+    y buses f\xEDsicamente separados e independientes para las instrucciones y para
+    los datos.\n    * **Hecho clave:** Permite a la CPU leer una instrucci\xF3n y
+    realizar un acceso a la memoria de datos al mismo tiempo, eliminando el cuello
+    de botella de Von Neumann. Com\xFAn en microcontroladores y procesadores de se\xF1ales
+    digitales (DSP).\n\n## **2. Unidad Central de Procesamiento (CPU)**\n\n* **CPU
+    (Central Processing Unit):** El componente principal encargado de interpretar
+    y ejecutar instrucciones y procesar datos.\n* **ALU (Unidad Aritm\xE9tico L\xF3gica):**
+    Circuito digital que calcula operaciones aritm\xE9ticas (suma, resta) y operaciones
+    l\xF3gicas (AND, OR, NOT, XOR) entre valores.\n* **CU (Unidad de Control):**
+    Coordina las actividades de la CPU. Dirige el flujo de datos entre la CPU y el
+    resto del ordenador. Decodifica las instrucciones recuperadas de la memoria.\n*
+    **Registros de la CPU:** Memoria interna de ultra-alta velocidad dentro de la
+    CPU para almacenar datos temporales inmediatos.\n    * **PC (Program Counter
+    / Contador de Programa):** Almacena la direcci\xF3n de memoria de la *siguiente*
+    instrucci\xF3n a ejecutar.\n    * **IR (Instruction Register / Registro de Instrucci\xF3n):**
+    Contiene la instrucci\xF3n que se est\xE1 ejecutando actualmente.\n    * **Acumulador:**
+    Almacena los resultados intermedios de las operaciones de la ALU.\n\n## **3.
+    Arquitectura del Conjunto de Instrucciones (ISA)**\n\n* **ISA (Instruction Set
+    Architecture):** La interfaz entre el hardware y el software. Define el conjunto
+    de instrucciones en lenguaje m\xE1quina que un procesador puede ejecutar.\n*
+    **RISC (Reduced Instruction Set Computer):**\n    * **Caracter\xEDsticas:** Conjunto
+    reducido de instrucciones simples, altamente optimizadas. Cada instrucci\xF3n
+    suele ejecutarse en un solo ciclo de reloj.\n    * **Uso:** Arquitectura ARM
+    (smartphones, Apple Silicon). Requiere m\xE1s l\xEDneas de c\xF3digo (software)
+    pero el hardware es m\xE1s simple y eficiente energ\xE9ticamente.\n* **CISC (Complex
+    Instruction Set Computer):**\n    * **Caracter\xEDsticas:** Conjunto grande de
+    instrucciones complejas. Una sola instrucci\xF3n puede ejecutar operaciones de
+    varios pasos (ej. leer memoria, sumar y guardar en memoria).\n    * **Uso:**
+    Arquitectura x86 (Intel, AMD). Menos l\xEDneas de c\xF3digo, hardware m\xE1s
+    complejo, mayor consumo de energ\xEDa.\n\n## **4. Jerarqu\xEDa de Memoria**\n\n*
+    **Principio de la Jerarqu\xEDa:** Organizar la memoria en base a la relaci\xF3n
+    coste/rendimiento. Cuanto m\xE1s cerca est\xE9 la memoria de la CPU, m\xE1s r\xE1pida,
+    de menor capacidad y m\xE1s cara es.\n* **Niveles (del m\xE1s r\xE1pido al m\xE1s
+    lento):**\n    1.  **Registros:** Dentro de la CPU. Capacidad en bytes. Velocidad
+    equivalente a la CPU.\n    2.  **Memoria Cach\xE9 (SRAM):** Memoria vol\xE1til
+    muy r\xE1pida. Se divide en niveles:\n        * **L1 (Cach\xE9 de Nivel 1):**
+    Integrada en el n\xFAcleo, dividida en cach\xE9 de datos y cach\xE9 de instrucciones.\n       
+    * **L2 (Cach\xE9 de Nivel 2):** Compartida o por n\xFAcleo, m\xE1s grande pero
+    ligeramente m\xE1s lenta que L1.\n        * **L3 (Cach\xE9 de Nivel 3):** Generalmente
+    compartida por todos los n\xFAcleos del procesador.\n    3.  **Memoria Principal
+    / RAM (DRAM):** Memoria vol\xE1til de trabajo del sistema. Capacidad en Gigabytes.\n   
+    4.  **Almacenamiento Secundario:** No vol\xE1til (SSD, HDD). Retiene datos sin
+    energ\xEDa. Alta latencia, capacidad en Terabytes.\n\n## **5. Buses del Sistema**\n\n*
+    **Bus de Sistema:** V\xEDa de comunicaci\xF3n electr\xF3nica que conecta los
+    componentes principales de un ordenador (CPU, Memoria, E/S). Se compone de tres
+    partes:\n    * **Bus de Datos:** Transporta la informaci\xF3n o los datos reales
+    entre los componentes. Es bidireccional. El ancho del bus (ej. 64 bits) determina
+    cu\xE1ntos datos se transfieren a la vez.\n    * **Bus de Direcciones:** Transporta
+    las direcciones de memoria donde se deben leer o escribir los datos. Es unidireccional
+    (de la CPU a la memoria). El ancho determina la cantidad m\xE1xima de memoria
+    direccionable.\n    * **Bus de Control:** Transporta se\xF1ales de estado y control
+    (ej. se\xF1ales de lectura, escritura, interrupciones, reloj) para coordinar
+    las actividades del sistema.\n\n## **6. T\xE9cnicas de Rendimiento y Paralelismo**\n\n*
+    **Ciclo de Instrucci\xF3n (Fetch-Decode-Execute):** El proceso b\xE1sico que
+    realiza la CPU: buscar la instrucci\xF3n en memoria (Fetch), decodificarla (Decode)
+    y ejecutarla (Execute).\n* **Pipelining (Segmentaci\xF3n de cauce):** T\xE9cnica
+    donde m\xFAltiples instrucciones se superponen en su ejecuci\xF3n. Mientras una
+    instrucci\xF3n se ejecuta, la siguiente se decodifica y una tercera se busca
+    en memoria. Mejora el *throughput* (rendimiento general).\n* **Riesgos del Pipeline
+    (Hazards):** Problemas que impiden que la siguiente instrucci\xF3n se ejecute
+    en su ciclo de reloj designado.\n    * *Riesgos Estructurales:* Conflictos por
+    recursos de hardware.\n    * *Riesgos de Datos:* Una instrucci\xF3n depende del
+    resultado de una instrucci\xF3n anterior que a\xFAn no ha terminado.\n    * *Riesgos
+    de Control:* Causados por instrucciones de salto o bifurcaci\xF3n que cambian
+    el flujo del programa.\n* **Ley de Amdahl:** Principio que establece que la mejora
+    de rendimiento obtenida al optimizar una parte de un sistema est\xE1 limitada
+    por la fracci\xF3n de tiempo que se utiliza dicha parte. Define el l\xEDmite
+    te\xF3rico de aceleraci\xF3n (*speedup*) al usar m\xFAltiples procesadores."

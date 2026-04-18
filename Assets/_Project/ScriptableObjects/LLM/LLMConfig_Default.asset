@@ -18,4 +18,4 @@ MonoBehaviour:
   _maxTokens: 2048
   _topP: 0.9
   _requestTimeoutSeconds: 600
-  _maxTotalRequestSeconds: 300
+  _maxTotalRequestSeconds: 600

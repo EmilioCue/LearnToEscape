@@ -416,8 +416,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PipelineTester
   generator: {fileID: 1052396108}
-  testTheme: "Ingenier\xEDa Inform\xE1tica"
-  puzzleCount: 0
+  knowledgeBase: {fileID: 11400000, guid: fb832fae655c0264f9a2f55691a3c501, type: 2}
+  puzzleCount: 1
   difficulty: easy
   totalTimeoutSeconds: 0
 --- !u!114 &1536325740
