@@ -47,14 +47,19 @@
         "Build/": true,
         "Library/": true,
         "library/": true,
+        "lte-unity-client/Library/": true,
         "obj/": true,
         "Obj/": true,
         "Logs/": true,
         "logs/": true,
+        "lte-unity-client/Logs/": true,
         "ProjectSettings/": true,
+        "lte-unity-client/ProjectSettings/": true,
         "UserSettings/": true,
+        "lte-unity-client/UserSettings/": true,
         "temp/": true,
-        "Temp/": true
+        "Temp/": true,
+        "lte-unity-client/Temp/": true
     },
     "files.associations": {
         "*.asset": "yaml",
@@ -67,5 +72,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "LearnToEscape.slnx"
+    "dotnet.defaultSolution": "lte-unity-client/LearnToEscape.slnx"
 }
