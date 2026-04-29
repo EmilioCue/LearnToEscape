@@ -45,7 +45,7 @@ public class PipelineTester : MonoBehaviour
             string pin = result.puzzle4_console?.pin ?? "?";
             Debug.Log($"Puzzle 4 (console): PIN={pin}");
 
-            FindObjectOfType<RoomFlowManager>()?.InitializeRoom(result);
+            FindFirstObjectByType<RoomFlowManager>()?.InitializeRoom(result);
         }
         catch (Exception e)
         {
