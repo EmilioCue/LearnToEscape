@@ -64,14 +64,31 @@ namespace LearnToEscape.Content
         public string definition;
     }
 
-    /// <summary>Consola final: PIN de 4 dígitos y pregunta de deducción.</summary>
+    /// <summary>
+    /// Consola final: pregunta deductiva, razonamiento Chain-of-Thought y PIN.
+    /// </summary>
+    /// <remarks>
+    /// El orden de los campos replica el del JSON emitido por el backend
+    /// (<c>deductionQuestion</c> → <c>stepByStepReasoning</c> → <c>pin</c>),
+    /// que a su vez fuerza al LLM a razonar antes de "escupir" el PIN.
+    /// El campo <see cref="stepByStepReasoning"/> es la traza interna del
+    /// modelo (Chain of Thought): NO debe mostrarse al jugador, pero permite
+    /// al diseñador auditar que el PIN se deduce realmente de los puzles 1-3.
+    /// </remarks>
     [Serializable]
     public class Puzzle4Console
     {
-        /// <summary>Código numérico de EXACTAMENTE 4 dígitos.</summary>
-        public string pin;
-
         /// <summary>Pregunta que guía al jugador a deducir el PIN.</summary>
         public string deductionQuestion;
+
+        /// <summary>
+        /// Razonamiento paso a paso (Chain of Thought) que justifica cada uno
+        /// de los 4 dígitos del PIN a partir de los puzles anteriores.
+        /// Uso interno (debug / Game Master); no se renderiza en escena.
+        /// </summary>
+        public string stepByStepReasoning;
+
+        /// <summary>Código numérico de EXACTAMENTE 4 dígitos.</summary>
+        public string pin;
     }
 }

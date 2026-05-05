@@ -268,6 +268,8 @@ namespace LearnToEscape.Puzzles
                     "(se permite en modo debug).", this);
             }
 
+            DumpChainOfThought();
+
             Debug.Log(
                 $"[{nameof(ConsolePuzzleController)}] Victoria simulada → OnPuzzleSolved " +
                 $"(PIN esperado: {_data.pin}).", this);
@@ -275,6 +277,30 @@ namespace LearnToEscape.Puzzles
             _isActive = false;
             StopErrorRoutineIfRunning();
             OnPuzzleSolved?.Invoke();
+        }
+
+        /// <summary>
+        /// Vuelca en consola el "Chain of Thought" emitido por el LLM para el
+        /// puzle 4: pregunta deductiva, razonamiento paso a paso y PIN final.
+        /// Pensado como herramienta de Game Master / QA para auditar que el
+        /// PIN se deduce realmente de los puzles 1-3 y no es un número
+        /// aleatorio. NO se invoca en el flujo normal de juego.
+        /// </summary>
+        private void DumpChainOfThought()
+        {
+            string question = string.IsNullOrWhiteSpace(_data.deductionQuestion)
+                ? "(sin pregunta)" : _data.deductionQuestion;
+            string reasoning = string.IsNullOrWhiteSpace(_data.stepByStepReasoning)
+                ? "(sin razonamiento — el backend no envió stepByStepReasoning)"
+                : _data.stepByStepReasoning;
+            string pin = string.IsNullOrEmpty(_data.pin) ? "????" : _data.pin;
+
+            Debug.Log(
+                $"[{nameof(ConsolePuzzleController)}] === Chain of Thought (Game Master) ===\n" +
+                $"  • Pregunta deductiva : {question}\n" +
+                $"  • Razonamiento (CoT) : {reasoning}\n" +
+                $"  • PIN esperado       : {pin}",
+                this);
         }
     }
 }

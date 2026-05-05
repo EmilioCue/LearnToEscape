@@ -30,7 +30,7 @@ import jakarta.validation.constraints.Size;
  * @param puzzle1_matrix  Puzzle de clasificación en 2 categorías.
  * @param puzzle2_router  Puzzle de secuencia ordenada de 5 pasos.
  * @param puzzle3_link    Puzzle de emparejar conceptos con definiciones.
- * @param puzzle4_console Puzzle final de deducción con PIN de 4 dígitos.
+ * @param puzzle4_console Puzzle final con razonamiento CoT y PIN de 4 dígitos.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record RoomDTO(
@@ -138,17 +138,32 @@ public record RoomDTO(
 	/**
 	 * Puzzle 4: consola final con PIN de 4 dígitos y pregunta de deducción.
 	 *
-	 * @param pin               código numérico de EXACTAMENTE 4 dígitos.
-	 * @param deductionQuestion pregunta que guía al jugador a deducir el PIN.
+	 * <p>Aplica la técnica <b>Chain of Thought</b> (CoT): el orden de los campos
+	 * fuerza al LLM a redactar primero la pregunta deductiva, después el
+	 * razonamiento paso a paso que la resuelve, y solo entonces el PIN. Esto
+	 * evita que el modelo "escupa" un número aleatorio sin trazabilidad lógica
+	 * con los puzles 1, 2 y 3.</p>
+	 *
+	 * @param deductionQuestion    pregunta que guía al jugador a deducir el PIN
+	 *                             contando elementos, posiciones o fechas en los
+	 *                             puzles anteriores.
+	 * @param stepByStepReasoning  cálculo lógico explícito (CoT) que el LLM
+	 *                             produce antes del PIN, justificando cada uno
+	 *                             de los 4 dígitos a partir de los puzles 1-3.
+	 * @param pin                  código numérico de EXACTAMENTE 4 dígitos,
+	 *                             resultado verificable del razonamiento previo.
 	 */
 	public record Puzzle4Console(
 
+			@NotBlank(message = "puzzle4_console.deductionQuestion is required")
+			String deductionQuestion,
+
+			@NotBlank(message = "puzzle4_console.stepByStepReasoning is required")
+			String stepByStepReasoning,
+
 			@NotBlank(message = "puzzle4_console.pin is required")
 			@Pattern(regexp = "\\d{4}", message = "puzzle4_console.pin must be exactly 4 digits")
-			String pin,
-
-			@NotBlank(message = "puzzle4_console.deductionQuestion is required")
-			String deductionQuestion
+			String pin
 	) {
 	}
 }

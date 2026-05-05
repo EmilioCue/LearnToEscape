@@ -147,8 +147,13 @@ namespace LearnToEscape.Content
             if (string.IsNullOrEmpty(puzzle.pin) || puzzle.pin.Length != 4 || !IsAllDigits(puzzle.pin))
                 errors.Add("puzzle4_console.pin must be exactly 4 numeric digits");
 
-            if (puzzle.deductionQuestion == null)
-                errors.Add("puzzle4_console.deductionQuestion is null");
+            if (string.IsNullOrWhiteSpace(puzzle.deductionQuestion))
+                errors.Add("puzzle4_console.deductionQuestion is missing");
+
+            // Chain of Thought: si no hay razonamiento, el PIN no es auditable
+            // y, por contrato, el backend ha incumplido el esquema CoT.
+            if (string.IsNullOrWhiteSpace(puzzle.stepByStepReasoning))
+                errors.Add("puzzle4_console.stepByStepReasoning is missing");
         }
 
         private static bool IsAllDigits(string value)

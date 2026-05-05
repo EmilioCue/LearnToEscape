@@ -18,7 +18,12 @@ namespace LearnToEscape.Content
         [Tooltip("Si está activo, no se llama al backend y se deserializa un RoomData de ejemplo.")]
         [SerializeField] private bool useDryRunDummyJson = true;
 
-        public async Task<RoomData> GenerateRoom(
+        /// <summary>
+        /// Adaptador legacy que acepta un <see cref="TopicKnowledgeBase"/>
+        /// (utilizado por <c>PipelineTester</c>) y delega en la sobrecarga
+        /// principal basada en <c>string</c>.
+        /// </summary>
+        public Task<RoomData> GenerateRoom(
             TopicKnowledgeBase knowledgeBase,
             int puzzleCount,
             string difficulty)
@@ -27,6 +32,23 @@ namespace LearnToEscape.Content
                 throw new System.ArgumentException(
                     "TopicKnowledgeBase is null or has an empty topicName. " +
                     "Assign a valid asset in the Inspector.", nameof(knowledgeBase));
+
+            return GenerateRoom(knowledgeBase.topicName, puzzleCount, difficulty);
+        }
+
+        /// <summary>
+        /// Solicita una sala al backend a partir de un tema textual ya
+        /// resuelto (p. ej. el seleccionado en el menú principal).
+        /// El backend se encarga de normalizar tildes y mayúsculas.
+        /// </summary>
+        public async Task<RoomData> GenerateRoom(
+            string topic,
+            int puzzleCount,
+            string difficulty)
+        {
+            if (string.IsNullOrWhiteSpace(topic))
+                throw new System.ArgumentException(
+                    "topic is null or empty.", nameof(topic));
 
             if (useDryRunDummyJson)
             {
@@ -45,7 +67,11 @@ namespace LearnToEscape.Content
                         "{\"concept\":\"IP\",\"definition\":\"Identificador de red\"}," +
                         "{\"concept\":\"MAC\",\"definition\":\"Identificador físico\"}" +
                     "]}," +
-                    "\"puzzle4_console\":{\"pin\":\"1234\",\"deductionQuestion\":\"¿Cuál es el PIN?\"}" +
+                    "\"puzzle4_console\":{" +
+                        "\"deductionQuestion\":\"¿Cuál es el PIN?\"," +
+                        "\"stepByStepReasoning\":\"Dummy: PIN fijo de pruebas 1234.\"," +
+                        "\"pin\":\"1234\"" +
+                    "}" +
                     "}";
 
                 var roomDry = JsonConvert.DeserializeObject<RoomData>(dummyJsonResponse);
@@ -62,7 +88,7 @@ namespace LearnToEscape.Content
 
             var requestPayload = new
             {
-                topic = knowledgeBase.topicName,
+                topic = topic,
                 puzzleCount = puzzleCount,
                 difficulty = difficulty
             };

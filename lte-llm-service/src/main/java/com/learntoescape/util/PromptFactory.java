@@ -122,8 +122,47 @@ public final class PromptFactory {
 				- puzzle1_matrix.items: Array de elementos a clasificar. Cada uno tiene "name" (string) y "categoryIndex" (entero, estrictamente 0 o 1).
 				- puzzle2_router.sequence: Array de EXACTAMENTE 5 strings. Deben ser 5 pasos cronológicos o lógicos ordenados del primero al último.
 				- puzzle3_link.pairs: Array de parejas. Cada pareja tiene un "concept" (concepto corto) y su "definition" (explicación).
-				- puzzle4_console.pin: String de EXACTAMENTE 4 dígitos numéricos (ejemplo: "4927").
-				- puzzle4_console.deductionQuestion: Pregunta deductiva que se pueda responder indirectamente usando la información de los puzles anteriores, y cuya respuesta mental conduzca al PIN.
+
+			REGLAS ABSOLUTAS PARA EL PUZLE 4 — DEFENSIVE PROMPTING (LLAMA 3.1):
+
+			PROHIBICIONES ABSOLUTAS — NUNCA HAGAS ESTO:
+			- PROHIBIDO contar letras, sílabas o caracteres de ninguna palabra. Los modelos de lenguaje fallan al tokenizar y producirán dígitos incorrectos.
+			- PROHIBIDO realizar operaciones matemáticas de ningún tipo: ni sumas, ni restas, ni multiplicaciones, ni divisiones, ni módulos. NADA de aritmética.
+			- PROHIBIDO inventar un PIN y después fabricar un razonamiento que lo justifique. Primero el razonamiento, después el PIN.
+
+			REGLA FUNDAMENTAL: El PIN de 4 dígitos se forma mediante MAPEO DIRECTO 1 a 1. Cada dígito se EXTRAE tal cual de un hecho concreto y observable de los puzles anteriores. No se calcula: se LEE.
+
+			ÚNICAS FUENTES VÁLIDAS PARA CADA DÍGITO (elige una distinta por dígito):
+			  FUENTE A — Contar cuántos items de puzzle1_matrix tienen categoryIndex=0. Ese conteo ES el dígito. Nada más.
+			  FUENTE B — Contar cuántos items de puzzle1_matrix tienen categoryIndex=1. Ese conteo ES el dígito. Nada más.
+			  FUENTE C — Identificar en qué posición (1, 2, 3, 4 o 5) aparece un paso concreto dentro de puzzle2_router.sequence. Esa posición ES el dígito. Nada más.
+			  FUENTE D — Contar cuántas parejas tiene puzzle3_link.pairs. Ese conteo ES el dígito. Nada más.
+
+			EJEMPLO COMPLETO Y CORRECTO DE stepByStepReasoning (copia este formato exacto):
+			  "Dígito 1: el número de elementos con categoryIndex=0 en el puzzle 1 → valor observado es 3 → dígito 1 es 3. Dígito 2: la posición del paso 'Compilar el código' en la secuencia del puzzle 2 → valor observado es 4 → dígito 2 es 4. Dígito 3: el número total de parejas en el puzzle 3 → valor observado es 5 → dígito 3 es 5. Dígito 4: el número de elementos con categoryIndex=1 en el puzzle 1 → valor observado es 2 → dígito 4 es 2. Por lo tanto, concatenando D1, D2, D3 y D4 en este orden, el PIN es: 3452"
+			  Campo pin correspondiente: "3452"
+
+			CÓMO RELLENAR CADA CAMPO:
+
+			puzzle4_console.deductionQuestion:
+			  Formula UNA pregunta por cada dígito, de forma directa y sin ambigüedad.
+			  Ejemplo: "Para abrir la consola necesitas un PIN de 4 dígitos. Dígito 1: ¿cuántos elementos pertenecen a la categoría '[categoría 0]' en el puzzle 1? Dígito 2: ¿en qué posición aparece '[paso X]' en la secuencia del puzzle 2? Dígito 3: ¿cuántas parejas tiene el puzzle 3? Dígito 4: ¿cuántos elementos pertenecen a la categoría '[categoría 1]' en el puzzle 1?"
+
+			puzzle4_console.stepByStepReasoning:
+			  Lista los 4 dígitos uno por uno. Para cada uno indica: la fuente, el hecho observable, y el valor resultante. SIN operaciones. SIN sumas. Solo lectura directa.
+			  Formato obligatorio para cada dígito: "Dígito N: [descripción de la fuente] → valor observado es X → dígito N es X"
+			  REGLA FINAL OBLIGATORIA: La última frase del stepByStepReasoning DEBE SER EXACTAMENTE esta concatenación explícita:
+			  "Por lo tanto, concatenando D1, D2, D3 y D4 en este orden, el PIN es: [D1][D2][D3][D4]"
+			  Ejemplo con dígitos 3, 4, 5, 2: "Por lo tanto, concatenando D1, D2, D3 y D4 en este orden, el PIN es: 3452"
+			  PROHIBIDO alterar el orden de los dígitos en esta frase de cierre. PROHIBIDO omitirla.
+
+			puzzle4_console.pin:
+			  COPIA LITERAL del número de 4 dígitos que aparece en la frase de cierre del stepByStepReasoning.
+			  NO es un nuevo cálculo. NO es una reinterpretación. Es exactamente el mismo número, sin ningún cambio.
+			  Si el stepByStepReasoning termina en "el PIN es: 3452", entonces pin DEBE ser "3452". Ni "3425", ni "3542", ni ninguna otra variante.
+			  AUTOVERIFICACIÓN OBLIGATORIA: antes de escribir el valor de pin, lee la frase de cierre de stepByStepReasoning y copia el número carácter a carácter.
+
+			ORDEN OBLIGATORIO DE CLAVES en el JSON de puzzle4_console: primero "deductionQuestion", después "stepByStepReasoning", y SOLO al final "pin". Este orden es CRÍTICO para que el razonamiento preceda siempre al PIN.
 
 				ESQUEMA JSON OBLIGATORIO:
 				{
@@ -139,8 +178,9 @@ public final class PromptFactory {
 				    "pairs": [ { "concept": "string", "definition": "string" }, ... ]
 				  },
 				  "puzzle4_console": {
-				    "pin": "string",
-				    "deductionQuestion": "string"
+				    "deductionQuestion": "string",
+				    "stepByStepReasoning": "string",
+				    "pin": "string"
 				  }
 				}
 				""";
