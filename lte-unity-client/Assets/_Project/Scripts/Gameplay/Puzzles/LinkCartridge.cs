@@ -1,41 +1,51 @@
-using System;
+using DG.Tweening;
+using LearnToEscape.Gameplay.Interaction;
 using TMPro;
 using UnityEngine;
 
 namespace LearnToEscape.Gameplay.Puzzles
 {
     /// <summary>
-    /// Cartucho arrastrable del puzle 3 (Link). Lleva un concepto y se
-    /// inserta en la <see cref="LinkBay"/> cuya definición le corresponde.
+    /// Cartucho arrastrable del puzle 3 (Link). El jugador lo recoge con el
+    /// sistema de interacción en primera persona y lo deposita en la
+    /// <see cref="LinkBay"/> cuya definición le corresponde.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// El <see cref="Rigidbody"/> se fuerza a cinemático en <see cref="Awake"/>:
-    /// solo está para habilitar los eventos de trigger contra las bahías. El
-    /// arrastre se aplica directamente sobre el <c>transform</c>, sin gravedad
-    /// ni inercia, igual que en el puzle 1.
+    /// Implementa <see cref="IHoldable"/> (que extiende <see cref="IInteractable"/>):
+    /// <list type="bullet">
+    ///   <item><see cref="OnHoverEnter"/>/<see cref="OnHoverExit"/> — feedback visual.</item>
+    ///   <item><see cref="Interact"/> — alterna entre "recoger" y "soltar".</item>
+    ///   <item><see cref="IsHeld"/> — estado que <see cref="PlayerInteractor"/> consulta
+    ///         para vincular o desvincular el cartucho del <c>holdPoint</c>.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Física</b>: el <see cref="Rigidbody"/> es cinemático en todo momento.
+    /// El <see cref="Collider"/> se <b>desactiva durante el agarre</b> para evitar
+    /// que el cartucho (pegado al holdPoint) choque con el <c>CharacterController</c>.
+    /// Unity dispara <c>OnTriggerExit</c> al desactivarlo dentro de un trigger y
+    /// <c>OnTriggerEnter</c> al reactivarlo, de modo que <see cref="LinkBay"/>
+    /// gestiona el estado correctamente sin filtros adicionales.
     /// </para>
     /// <para>
     /// El cartucho desconoce qué bahía es la "correcta": solo guarda su
-    /// <see cref="PairId"/>. Es la <see cref="LinkBay"/> quien compara su
-    /// <c>ExpectedPairId</c> con el del cartucho que tenga dentro y el
-    /// controlador del puzle quien decide si se ha resuelto.
+    /// <see cref="PairId"/>. Es la <see cref="LinkBay"/> quien compara
+    /// su <c>ExpectedPairId</c> con el del cartucho dentro.
     /// </para>
     /// </remarks>
     [RequireComponent(typeof(Collider))]
     [RequireComponent(typeof(Rigidbody))]
     [DisallowMultipleComponent]
-    public class LinkCartridge : MonoBehaviour
+    public class LinkCartridge : MonoBehaviour, IHoldable
     {
         [Header("Visual")]
         [Tooltip("TextMeshPro hijo donde se escribe el concepto. Si se deja vacío, " +
                  "se busca automáticamente en los hijos al despertar.")]
         [SerializeField] private TMP_Text label;
 
-        [Header("Arrastre")]
-        [Tooltip("Cámara usada para convertir la posición del ratón a mundo. " +
-                 "Si se deja vacía, se usa Camera.main.")]
-        [SerializeField] private Camera dragCamera;
+        [Tooltip("Color de resaltado cuando el jugador apunta al cartucho.")]
+        [SerializeField] private Color hoverColor = Color.yellow;
 
         /// <summary>
         /// Identificador de la pareja concepto-definición a la que pertenece este
@@ -43,13 +53,14 @@ namespace LearnToEscape.Gameplay.Puzzles
         /// </summary>
         public int PairId { get; private set; } = -1;
 
-        /// <summary>Se dispara cuando el jugador suelta este cartucho.</summary>
-        public event Action<LinkCartridge> OnReleased;
+        /// <inheritdoc />
+        public bool IsHeld { get; private set; }
 
         private Rigidbody _rb;
-        private Vector3 _grabWorldOffset;
-        private float _grabScreenDepth;
-        private bool _isDragging;
+        private Collider _col;
+        private MeshRenderer _meshRenderer;
+        private TMP_Text _tmpText;
+        private Color _originalColor;
         private bool _interactable;
 
         private void Awake()
@@ -58,9 +69,37 @@ namespace LearnToEscape.Gameplay.Puzzles
             _rb.isKinematic = true;
             _rb.useGravity = false;
 
-            if (dragCamera == null) dragCamera = Camera.main;
-            if (label == null) label = GetComponentInChildren<TMP_Text>(true);
+            _col = GetComponent<Collider>();
+
+            _tmpText = null;
+            _meshRenderer = null;
+            _originalColor = Color.white;
+
+            if (TryGetComponent<TMP_Text>(out _tmpText))
+            {
+                _originalColor = _tmpText.color;
+            }
+            else if (TryGetComponent<MeshRenderer>(out _meshRenderer))
+            {
+                Material mat = _meshRenderer.material;
+                if (mat != null && mat.HasProperty("_Color"))
+                    _originalColor = mat.color;
+                else
+                    _meshRenderer = null;
+            }
+
+            if (label == null)
+                label = GetComponentInChildren<TMP_Text>(includeInactive: true);
         }
+
+        private void OnDestroy()
+        {
+            transform.DOKill();
+        }
+
+        // ------------------------------------------------------------------ //
+        //  Configuración (llamada por LinkPuzzleController)                    //
+        // ------------------------------------------------------------------ //
 
         /// <summary>
         /// Configura el cartucho con el id de su pareja y el texto del concepto.
@@ -71,62 +110,108 @@ namespace LearnToEscape.Gameplay.Puzzles
             PairId = pairId;
 
             if (label != null)
-            {
                 label.text = conceptText ?? string.Empty;
-            }
             else
-            {
                 Debug.LogWarning(
                     $"[{nameof(LinkCartridge)}] No hay TMP_Text hijo donde escribir " +
                     $"'{conceptText}'. Asigna uno en el Inspector.", this);
-            }
         }
 
         /// <summary>
-        /// Habilita o deshabilita el arrastre. Si se desactiva durante un
-        /// arrastre en curso, lo cancela limpiamente.
+        /// Habilita o deshabilita la interacción. Si se desactiva mientras está
+        /// siendo sostenido, se suelta inmediatamente.
         /// </summary>
         public void SetInteractable(bool value)
         {
             _interactable = value;
-            if (!value && _isDragging) _isDragging = false;
+            if (!value && IsHeld)
+                ForceRelease();
         }
 
-        private void OnMouseDown()
+        // ------------------------------------------------------------------ //
+        //  IInteractable                                                        //
+        // ------------------------------------------------------------------ //
+
+        /// <inheritdoc />
+        public void OnHoverEnter()
+        {
+            if (!_interactable || IsHeld) return;
+            if (_tmpText != null)
+                _tmpText.color = hoverColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = hoverColor;
+        }
+
+        /// <inheritdoc />
+        public void OnHoverExit()
+        {
+            if (_tmpText != null)
+                _tmpText.color = _originalColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = _originalColor;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Alterna entre recoger y soltar. <see cref="PlayerInteractor"/> consulta
+        /// <see cref="IsHeld"/> inmediatamente después para vincular/desvincular
+        /// el transform al <c>holdPoint</c>.
+        /// </remarks>
+        public void Interact()
         {
             if (!_interactable) return;
-            if (dragCamera == null)
-            {
-                Debug.LogError(
-                    $"[{nameof(LinkCartridge)}] No hay cámara de arrastre " +
-                    "(dragCamera vacío y Camera.main no existe).", this);
-                return;
-            }
 
-            _grabScreenDepth = dragCamera.WorldToScreenPoint(transform.position).z;
-            Vector3 worldUnderCursor = ScreenToWorldAtDepth(Input.mousePosition, _grabScreenDepth);
-            _grabWorldOffset = transform.position - worldUnderCursor;
-            _isDragging = true;
+            if (!IsHeld)
+                PickUp();
+            else
+                Release();
         }
 
-        private void OnMouseDrag()
-        {
-            if (!_isDragging || dragCamera == null) return;
+        // ------------------------------------------------------------------ //
+        //  Pick-up / Release                                                   //
+        // ------------------------------------------------------------------ //
 
-            Vector3 worldUnderCursor = ScreenToWorldAtDepth(Input.mousePosition, _grabScreenDepth);
-            transform.position = worldUnderCursor + _grabWorldOffset;
+        private void PickUp()
+        {
+            IsHeld = true;
+
+            // Desactivar el collider mientras viaja pegado al holdPoint: evita que
+            // empuje el CharacterController. Unity dispara OnTriggerExit en la
+            // LinkBay al desactivarlo, limpiando el estado de la bahía anterior.
+            _col.enabled = false;
+
+            // Cancelar snap animation antes de que PlayerInteractor inicie el grab.
+            transform.DOKill(complete: false);
+
+            // Restaurar color: en la mano el hover no tiene sentido.
+            if (_tmpText != null)
+                _tmpText.color = _originalColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = _originalColor;
+
+            Debug.Log($"[{nameof(LinkCartridge)}] '{name}' recogido.", this);
         }
 
-        private void OnMouseUp()
+        private void Release()
         {
-            if (!_isDragging) return;
-            _isDragging = false;
-            OnReleased?.Invoke(this);
+            IsHeld = false;
+
+            // Reactivar el collider al soltar: si el cartucho está dentro de una
+            // LinkBay Unity disparará OnTriggerEnter automáticamente.
+            _col.enabled = true;
+
+            Debug.Log($"[{nameof(LinkCartridge)}] '{name}' soltado.", this);
         }
 
-        private Vector3 ScreenToWorldAtDepth(Vector3 screenPos, float depth)
+        /// <summary>
+        /// Suelta el cartucho de forma forzada desde <see cref="SetInteractable"/>
+        /// sin pasar por <see cref="PlayerInteractor"/>.
+        /// </summary>
+        private void ForceRelease()
         {
-            return dragCamera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, depth));
+            transform.DOKill(complete: false);
+            transform.SetParent(null);
+            Release();
         }
     }
 }

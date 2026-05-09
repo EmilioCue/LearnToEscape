@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 
@@ -29,6 +30,15 @@ namespace LearnToEscape.Gameplay.Puzzles
         [Tooltip("TextMeshPro hijo donde se escribe el nombre de la categoría. " +
                  "Si se deja vacío, se busca automáticamente en los hijos.")]
         [SerializeField] private TMP_Text label;
+
+        [Header("Snap (DOTween)")]
+        [Tooltip("Punto al que se animará magnéticamente el ítem al soltarse " +
+                 "dentro de la zona. Crea un GameObject hijo vacío centrado en " +
+                 "la zona y asígnalo aquí.")]
+        [SerializeField] private Transform snapPoint;
+
+        [Tooltip("Duración de la animación de snap.")]
+        [SerializeField] private float snapDuration = 0.3f;
 
         /// <summary>Índice de categoría que esta zona representa (0 o 1).</summary>
         public int ZoneCategoryIndex { get; private set; } = -1;
@@ -80,10 +90,34 @@ namespace LearnToEscape.Gameplay.Puzzles
         private void OnTriggerEnter(Collider other)
         {
             var item = other.GetComponentInParent<DraggableMatrixItem>();
-            if (item == null) return;
+            // Ignoramos el ítem si lo está llevando el jugador: OnTriggerStay
+            // lo registrará en el siguiente FixedUpdate cuando IsHeld = false.
+            if (item == null || item.IsHeld) return;
 
             if (_itemsInside.Add(item))
+            {
+                SnapItem(item);
                 OnContentsChanged?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// Cubre el caso en que el jugador suelta un ítem <em>dentro</em> de la
+        /// zona: el ítem ya solapaba el trigger antes de que IsHeld pasase a
+        /// false, por lo que <c>OnTriggerEnter</c> no vuelve a dispararse.
+        /// <c>OnTriggerStay</c> lo registra en el siguiente FixedUpdate.
+        /// </summary>
+        private void OnTriggerStay(Collider other)
+        {
+            var item = other.GetComponentInParent<DraggableMatrixItem>();
+            if (item == null || item.IsHeld) return;
+
+            // Add() devuelve false si ya estaba en el set → sin snap ni notificación duplicada.
+            if (_itemsInside.Add(item))
+            {
+                SnapItem(item);
+                OnContentsChanged?.Invoke();
+            }
         }
 
         private void OnTriggerExit(Collider other)
@@ -91,8 +125,45 @@ namespace LearnToEscape.Gameplay.Puzzles
             var item = other.GetComponentInParent<DraggableMatrixItem>();
             if (item == null) return;
 
+            // Eliminamos sin comprobar IsHeld: si el jugador recoge el ítem
+            // de dentro de la zona, debe dejar de estar registrado aquí.
             if (_itemsInside.Remove(item))
                 OnContentsChanged?.Invoke();
+        }
+
+        // ------------------------------------------------------------------ //
+        //  Snap magnético (DOTween)                                            //
+        // ------------------------------------------------------------------ //
+
+        /// <summary>
+        /// Anima el ítem hasta el <see cref="snapPoint"/> de la zona y lo emparenta
+        /// allí para que quede fijo aunque el jugador se mueva cerca.
+        /// </summary>
+        private void SnapItem(DraggableMatrixItem item)
+        {
+            if (snapPoint == null)
+            {
+                Debug.LogWarning(
+                    $"[{nameof(MatrixDropZone)}] snapPoint no asignado en '{name}'. " +
+                    "El ítem se registra pero no se anima. Crea un Transform hijo " +
+                    "centrado en la zona y asígnalo al campo snapPoint.", this);
+                return;
+            }
+
+            var t = item.transform;
+
+            // Cancelar tween previo (p.ej. grab animation que aún no terminó).
+            t.DOKill(complete: false);
+
+            // Emparentar al snapPoint para que el ítem quede solidario a la zona
+            // (si la zona se mueve en el futuro o la escena usa escala dinámica).
+            t.SetParent(snapPoint, worldPositionStays: true);
+
+            t.DOLocalMove(Vector3.zero, snapDuration)
+             .SetEase(Ease.OutBounce);
+
+            t.DOLocalRotate(Vector3.zero, snapDuration)
+             .SetEase(Ease.OutBounce);
         }
     }
 }

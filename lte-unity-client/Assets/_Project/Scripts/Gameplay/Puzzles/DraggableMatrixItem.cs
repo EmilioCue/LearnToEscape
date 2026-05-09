@@ -1,54 +1,64 @@
-using System;
+using DG.Tweening;
+using LearnToEscape.Gameplay.Interaction;
 using TMPro;
 using UnityEngine;
 
 namespace LearnToEscape.Gameplay.Puzzles
 {
     /// <summary>
-    /// Ítem arrastrable con ratón del puzle 1 (Matrix). Representa un concepto
-    /// que el jugador debe clasificar en una <see cref="MatrixDropZone"/>.
+    /// Ítem del puzle 1 (Matrix) que el jugador puede tomar y depositar en una
+    /// <see cref="MatrixDropZone"/> usando el sistema de interacción en primera persona.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// El <see cref="Rigidbody"/> se fuerza a cinemático en <see cref="Awake"/>:
-    /// su única función es habilitar los eventos de trigger con las zonas de
-    /// caída. El movimiento se aplica directamente sobre el <c>transform</c>
-    /// durante el arrastre, y los ítems se quedan donde el jugador los suelta
-    /// (sin gravedad ni inercia).
+    /// Implementa <see cref="IHoldable"/> (que extiende <see cref="IInteractable"/>):
+    /// <list type="bullet">
+    ///   <item><see cref="OnHoverEnter"/>/<see cref="OnHoverExit"/> — feedback visual de selección.</item>
+    ///   <item><see cref="Interact"/> — alterna entre "recoger" y "soltar".</item>
+    ///   <item><see cref="IsHeld"/> — estado que <see cref="PlayerInteractor"/> consulta
+    ///         para decidir si debe vincular el objeto al <c>holdPoint</c>.</item>
+    /// </list>
     /// </para>
     /// <para>
-    /// El controlador gobierna la interactividad: el ítem nace en estado
-    /// <em>no interactuable</em> y solo responde al ratón cuando
-    /// <see cref="SetInteractable"/> recibe <c>true</c> (típicamente al
-    /// activarse el puzle). Al resolverse, se vuelve a desactivar para impedir
-    /// que el jugador siga moviéndolos.
+    /// <b>Física</b>: el <see cref="Rigidbody"/> es cinemático en todo momento.
+    /// El <see cref="Collider"/> se <b>desactiva durante el agarre</b> para evitar
+    /// que el ítem (pegado al holdPoint de la cámara) choque con el
+    /// <c>CharacterController</c> del jugador y lo lance por el aire.
+    /// Unity dispara <c>OnTriggerExit</c> al desactivar el collider dentro de un
+    /// trigger y <c>OnTriggerEnter</c> al reactivarlo, por lo que las
+    /// <see cref="MatrixDropZone"/> detectan correctamente recoger y soltar.
+    /// </para>
+    /// <para>
+    /// <b>Hover visual</b>: en el mismo GameObject, prioriza
+    /// <c>TMP_Text</c>; si no hay, usa <c>MeshRenderer</c> solo si el material
+    /// expone <c>_Color</c>. Así se evita tocar el mesh interno del texto TMP 3D.
     /// </para>
     /// </remarks>
     [RequireComponent(typeof(Collider))]
     [RequireComponent(typeof(Rigidbody))]
     [DisallowMultipleComponent]
-    public class DraggableMatrixItem : MonoBehaviour
+    public class DraggableMatrixItem : MonoBehaviour, IHoldable
     {
         [Header("Visual")]
-        [Tooltip("TextMeshPro hijo donde se escribe el nombre del ítem. Si se deja vacío, " +
-                 "se busca automáticamente en los hijos al despertar.")]
+        [Tooltip("TextMeshPro hijo donde se escribe el nombre del ítem. Si se deja " +
+                 "vacío, se busca automáticamente en los hijos al despertar.")]
         [SerializeField] private TMP_Text label;
 
-        [Header("Arrastre")]
-        [Tooltip("Cámara usada para convertir la posición del ratón a mundo. " +
-                 "Si se deja vacía, se usa Camera.main.")]
-        [SerializeField] private Camera dragCamera;
+        [Tooltip("Color de resaltado cuando el jugador apunta al ítem.")]
+        [SerializeField] private Color hoverColor = Color.yellow;
 
         /// <summary>Índice de categoría correcta (0 o 1) asignado por la IA.</summary>
         public int AssignedCategoryIndex { get; private set; } = -1;
 
-        /// <summary>Se dispara cuando el jugador suelta este ítem.</summary>
-        public event Action<DraggableMatrixItem> OnReleased;
+        /// <inheritdoc />
+        public bool IsHeld { get; private set; }
 
         private Rigidbody _rb;
-        private Vector3 _grabWorldOffset;
-        private float _grabScreenDepth;
-        private bool _isDragging;
+        private Collider _col;
+        private MeshRenderer _meshRenderer;
+        private TMP_Text _tmpText;
+
+        private Color _originalColor;
         private bool _interactable;
 
         private void Awake()
@@ -57,13 +67,41 @@ namespace LearnToEscape.Gameplay.Puzzles
             _rb.isKinematic = true;
             _rb.useGravity = false;
 
-            if (dragCamera == null) dragCamera = Camera.main;
-            if (label == null) label = GetComponentInChildren<TMP_Text>(true);
+            _col = GetComponent<Collider>();
+
+            _tmpText = null;
+            _meshRenderer = null;
+            _originalColor = Color.white;
+
+            if (TryGetComponent<TMP_Text>(out _tmpText))
+            {
+                _originalColor = _tmpText.color;
+            }
+            else if (TryGetComponent<MeshRenderer>(out _meshRenderer))
+            {
+                Material mat = _meshRenderer.material;
+                if (mat != null && mat.HasProperty("_Color"))
+                    _originalColor = mat.color;
+                else
+                    _meshRenderer = null;
+            }
+
+            if (label == null)
+                label = GetComponentInChildren<TMP_Text>(includeInactive: true);
         }
+
+        private void OnDestroy()
+        {
+            transform.DOKill();
+        }
+
+        // ------------------------------------------------------------------ //
+        //  Configuración (llamada por MatrixPuzzleController)                  //
+        // ------------------------------------------------------------------ //
 
         /// <summary>
         /// Configura el ítem con su categoría correcta y el nombre visible.
-        /// Debe llamarse una vez desde el controlador del puzle antes de activarlo.
+        /// Debe llamarse una vez desde el controlador antes de activar el puzle.
         /// </summary>
         public void Setup(int categoryIndex, string itemName)
         {
@@ -73,55 +111,106 @@ namespace LearnToEscape.Gameplay.Puzzles
                 label.text = itemName ?? string.Empty;
             else
                 Debug.LogWarning(
-                    $"[{nameof(DraggableMatrixItem)}] No hay TMP_Text hijo donde escribir " +
-                    $"'{itemName}'. Asigna uno en el Inspector.", this);
+                    $"[{nameof(DraggableMatrixItem)}] No hay TMP_Text hijo donde " +
+                    $"escribir '{itemName}'. Asigna uno en el Inspector.", this);
         }
 
         /// <summary>
-        /// Habilita o deshabilita el arrastre. Si se desactiva durante un
-        /// arrastre en curso, lo cancela limpiamente.
+        /// Habilita o deshabilita la interacción con este ítem. Si se desactiva
+        /// mientras está siendo sostenido, se suelta inmediatamente.
         /// </summary>
         public void SetInteractable(bool value)
         {
             _interactable = value;
-            if (!value && _isDragging) _isDragging = false;
+
+            if (!value && IsHeld)
+                ForceRelease();
         }
 
-        private void OnMouseDown()
+        // ------------------------------------------------------------------ //
+        //  IInteractable                                                        //
+        // ------------------------------------------------------------------ //
+
+        /// <inheritdoc />
+        public void OnHoverEnter()
+        {
+            if (!_interactable || IsHeld) return;
+            if (_tmpText != null)
+                _tmpText.color = hoverColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = hoverColor;
+        }
+
+        /// <inheritdoc />
+        public void OnHoverExit()
+        {
+            if (_tmpText != null)
+                _tmpText.color = _originalColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = _originalColor;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Alterna entre recoger y soltar. <see cref="PlayerInteractor"/> consulta
+        /// <see cref="IsHeld"/> inmediatamente después para vincular/desvincular
+        /// el transform al <c>holdPoint</c>.
+        /// </remarks>
+        public void Interact()
         {
             if (!_interactable) return;
-            if (dragCamera == null)
-            {
-                Debug.LogError(
-                    $"[{nameof(DraggableMatrixItem)}] No hay cámara de arrastre " +
-                    "(dragCamera vacío y Camera.main no existe).", this);
-                return;
-            }
 
-            _grabScreenDepth = dragCamera.WorldToScreenPoint(transform.position).z;
-            Vector3 worldUnderCursor = ScreenToWorldAtDepth(Input.mousePosition, _grabScreenDepth);
-            _grabWorldOffset = transform.position - worldUnderCursor;
-            _isDragging = true;
+            if (!IsHeld)
+                PickUp();
+            else
+                Release();
         }
 
-        private void OnMouseDrag()
-        {
-            if (!_isDragging || dragCamera == null) return;
+        // ------------------------------------------------------------------ //
+        //  Pick-up / Release                                                   //
+        // ------------------------------------------------------------------ //
 
-            Vector3 worldUnderCursor = ScreenToWorldAtDepth(Input.mousePosition, _grabScreenDepth);
-            transform.position = worldUnderCursor + _grabWorldOffset;
+        private void PickUp()
+        {
+            IsHeld = true;
+
+            // Desactivar el collider mientras viaja pegado al holdPoint: evita que
+            // empuje el CharacterController y salga volando. Unity dispara
+            // OnTriggerExit en las MatrixDropZone al desactivarlo, limpiando el estado.
+            _col.enabled = false;
+
+            // Cancelar snap animation antes de que PlayerInteractor inicie el grab.
+            transform.DOKill(complete: false);
+
+            // Revertir color: en la mano ya no tiene sentido el hover.
+            if (_tmpText != null)
+                _tmpText.color = _originalColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = _originalColor;
+
+            Debug.Log($"[{nameof(DraggableMatrixItem)}] '{name}' recogido.", this);
         }
 
-        private void OnMouseUp()
+        private void Release()
         {
-            if (!_isDragging) return;
-            _isDragging = false;
-            OnReleased?.Invoke(this);
+            IsHeld = false;
+
+            // Reactivar el collider al soltar: si el ítem está dentro de una
+            // MatrixDropZone Unity disparará OnTriggerEnter automáticamente.
+            _col.enabled = true;
+
+            Debug.Log($"[{nameof(DraggableMatrixItem)}] '{name}' soltado.", this);
         }
 
-        private Vector3 ScreenToWorldAtDepth(Vector3 screenPos, float depth)
+        /// <summary>
+        /// Suelta el ítem de forma forzada (sin notificar a <see cref="PlayerInteractor"/>).
+        /// Solo para limpieza de emergencia desde <see cref="SetInteractable"/>.
+        /// </summary>
+        private void ForceRelease()
         {
-            return dragCamera.ScreenToWorldPoint(new Vector3(screenPos.x, screenPos.y, depth));
+            transform.DOKill(complete: false);
+            transform.SetParent(null);
+            Release();
         }
     }
 }
