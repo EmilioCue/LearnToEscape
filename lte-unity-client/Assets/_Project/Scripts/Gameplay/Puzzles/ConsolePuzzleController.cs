@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using LearnToEscape.Content;
 using LearnToEscape.Gameplay.Puzzles;
+using LearnToEscape.UI;
 using TMPro;
 using UnityEngine;
 using ConsoleKey = LearnToEscape.Gameplay.Puzzles.ConsoleKey;
@@ -9,22 +10,29 @@ using ConsoleKey = LearnToEscape.Gameplay.Puzzles.ConsoleKey;
 namespace LearnToEscape.Puzzles
 {
     /// <summary>
-    /// Controlador del puzle 4 (Console) en su versión jugable: muestra la
-    /// pregunta de deducción, registra los clics de un teclado 3D de
-    /// <see cref="ConsoleKey"/> y compara el PIN tecleado con el emitido por
-    /// el backend, disparando <see cref="OnPuzzleSolved"/> al acertar.
+    /// Controlador del puzle 4 (Console): arranca inerte y solo acepta input
+    /// tras recibir <see cref="PowerUpConsole"/> desde
+    /// <see cref="LearnToEscape.Gameplay.Rooms.RoomFlowManager"/> cuando los
+    /// 3 subsistemas previos han sido restaurados.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// El controlador es la única fuente de verdad del input en curso
-    /// (<see cref="_currentInput"/>); las teclas son meras vistas que envían
-    /// su <c>keyValue</c> y delegan la interpretación aquí.
+    /// <b>Barrera de sincronización:</b> mientras <c>_isPoweredOn == false</c>
+    /// el display permanece vacío, la emisión del material está apagada y
+    /// cualquier pulsación de tecla o entrada al Trigger se ignora
+    /// silenciosamente. Al encenderse, el color de emisión HDR del
+    /// <see cref="panelRenderer"/> se actualiza por código sobre una instancia
+    /// de material propia (sin tocar el asset del proyecto).
     /// </para>
     /// <para>
-    /// El feedback de error se gestiona con una corrutina (<see cref="ShowErrorAndClear"/>)
-    /// que bloquea nuevas pulsaciones mientras se muestra "ERROR", para evitar
-    /// que el jugador acumule dígitos sobre el mensaje y para que el reset
-    /// sea atómico desde su punto de vista.
+    /// <b>Cooldown anti-fuerza bruta:</b> tras un PIN erróneo, el input queda
+    /// bloqueado durante <see cref="errorCooldownSeconds"/> y el display muestra
+    /// el mensaje de error. Al expirar vuelve al estado "_ _ _ _".
+    /// </para>
+    /// <para>
+    /// La pregunta de deducción del LLM se muestra en el HUD 2D gestionado por
+    /// <see cref="HUDManager"/> cuando el jugador (tag "Player") entra en el
+    /// Collider Trigger de este GameObject.
     /// </para>
     /// </remarks>
     [DisallowMultipleComponent]
@@ -32,36 +40,87 @@ namespace LearnToEscape.Puzzles
     {
         private const string ClearKey = "C";
         private const string EnterKey = "E";
-        private const string ErrorMessage = "ERROR";
+        private const string ErrorMessage = "ERR - BLOQUEO";
         private const int PinLength = 4;
-        private const float ErrorDisplaySeconds = 1f;
 
         /// <inheritdoc />
         public event Action OnPuzzleSolved;
 
-        [Header("Textos de escena (TextMeshPro)")]
-        [Tooltip("Slot para mostrar la pregunta de deducción al jugador.")]
-        [SerializeField] private TMP_Text questionText;
+        [Header("Display 3D (PIN)")]
+        [Tooltip("Texto TMP en el mundo 3D que muestra el estado de la consola y el PIN introducido.")]
+        [SerializeField] private TMP_Text display3DText;
 
-        [Tooltip("Display donde se muestra el PIN que va tecleando el jugador.")]
-        [SerializeField] private TMP_Text inputDisplay;
-
-        [Header("Teclado")]
-        [Tooltip("Las 12 teclas del teclado 3D: \"0\"-\"9\", \"C\" (Clear) y \"E\" (Enter).")]
-        [SerializeField] private ConsoleKey[] keys;
+        [Header("Anti-fuerza bruta")]
+        [Tooltip("Segundos de bloqueo de input tras introducir un PIN erróneo.")]
+        [SerializeField] private float errorCooldownSeconds = 5f;
 
         [Header("Visual")]
-        [Tooltip("Si está activo, el display muestra asteriscos en vez de los dígitos. " +
-                 "Útil para producción; conviene dejarlo desactivado en greybox.")]
+        [Tooltip("Si está activo, el display muestra asteriscos en vez de los dígitos reales.")]
         [SerializeField] private bool maskInput = false;
 
+        [Header("Visuals — Emisión del panel")]
+        [Tooltip("Renderer que contiene el material URP de la consola.")]
+        [SerializeField] private Renderer panelRenderer;
+
+        [Tooltip("Color HDR de emisión cuando la consola está encendida.")]
+        [SerializeField, ColorUsage(true, true)] private Color onlineEmissionColor = Color.green;
+
         private Puzzle4Console _data;
+        private string _currentContextText = string.Empty;
+        private Material _panelMaterialInstanced;
+
+        private bool _isPoweredOn = false;
         private bool _isActive;
         private bool _isSolved;
-        private bool _isShowingError;
+        private bool _isInCooldown;
+        private bool _playerInTrigger;
 
         private string _currentInput = string.Empty;
         private Coroutine _errorRoutine;
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Lifecycle — inicialización del material
+        // ─────────────────────────────────────────────────────────────────────
+
+        private void Awake()
+        {
+            // Garantiza pantalla vacía independientemente del estado del renderer.
+            if (display3DText != null) display3DText.text = string.Empty;
+
+            // Auto-descubrimiento: cablea todas las ConsoleKey hijas del prefab
+            // sin necesidad de asignarlas manualmente en el Inspector.
+            ConsoleKey[] allKeys = GetComponentsInChildren<ConsoleKey>(true);
+            if (allKeys.Length == 0)
+                Debug.LogWarning(
+                    $"[{nameof(ConsolePuzzleController)}] No se encontraron componentes " +
+                    "ConsoleKey en los hijos. Comprueba la jerarquía del prefab.", this);
+            foreach (ConsoleKey key in allKeys)
+                key.Setup(HandleKeyPress);
+
+            if (panelRenderer == null)
+            {
+                Debug.LogWarning(
+                    $"[{nameof(ConsolePuzzleController)}] panelRenderer sin asignar; " +
+                    "el efecto de emisión no funcionará.", this);
+                return;
+            }
+
+            // Instanciamos el material para no modificar el asset compartido del proyecto.
+            _panelMaterialInstanced = panelRenderer.material;
+            _panelMaterialInstanced.EnableKeyword("_EMISSION");
+            _panelMaterialInstanced.SetColor("_EmissionColor", Color.black);
+        }
+
+        private void Start()
+        {
+            // Segunda limpieza: cubre el caso en que otro componente escriba en el
+            // TMP durante Awake (p.ej. un prefab con texto de placeholder).
+            if (display3DText != null) display3DText.text = string.Empty;
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // IPuzzleController
+        // ─────────────────────────────────────────────────────────────────────
 
         /// <inheritdoc />
         public void InjectData(object puzzleData)
@@ -88,47 +147,81 @@ namespace LearnToEscape.Puzzles
                 return;
             }
 
-            PopulateSceneTexts();
-            WireKeys();
+            _currentContextText = _data.deductionQuestion ?? string.Empty;
+            _currentInput = string.Empty;
+            _isPoweredOn = false;
+
+            // La consola arranca inerte: display vacío hasta PowerUpConsole().
+            SetDisplayText(string.Empty);
+
+            _isActive = true;
+            Debug.Log(
+                $"[{nameof(ConsolePuzzleController)}] Activo pero OFFLINE. " +
+                "Esperando señal de sincronización.", this);
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // API pública — Barrera de sincronización
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Enciende la consola tras completarse los 3 subsistemas previos.
+        /// Activa la emisión HDR del panel, habilita el input, actualiza el
+        /// display a "_ _ _ _" y, si el jugador ya está dentro del Trigger,
+        /// muestra la pregunta en el HUD.
+        /// </summary>
+        public void PowerUpConsole()
+        {
+            if (_isPoweredOn) return;
+
+            _isPoweredOn = true;
+            // Garantiza que el input funciona aunque ActivatePuzzle() no haya sido
+            // llamado (p.ej. en escenas de testing sin GameSession.CurrentRoom).
+            _isActive = true;
+
+            _panelMaterialInstanced?.SetColor("_EmissionColor", onlineEmissionColor);
 
             _currentInput = string.Empty;
             RefreshDisplay();
 
-            _isActive = true;
-            Debug.Log(
-                $"[{nameof(ConsolePuzzleController)}] Activo. Esperando PIN de {PinLength} dígitos.", this);
+            if (_playerInTrigger)
+                HUDManager.Instance?.ShowContextText(_currentContextText);
+
+            Debug.Log($"[{nameof(ConsolePuzzleController)}] ONLINE. Esperando PIN.", this);
         }
 
-        private void PopulateSceneTexts()
-        {
-            AssignText(questionText, _data.deductionQuestion);
-        }
+        // ─────────────────────────────────────────────────────────────────────
+        // Trigger de proximidad (HUD 2D)
+        // ─────────────────────────────────────────────────────────────────────
 
-        private void WireKeys()
+        private void OnTriggerEnter(Collider other)
         {
-            if (keys == null || keys.Length == 0)
+            if (!other.CompareTag("Player")) return;
+            _playerInTrigger = true;
+            if (!_isPoweredOn)
             {
-                Debug.LogError(
-                    $"[{nameof(ConsolePuzzleController)}] No hay ConsoleKey asignados en el Inspector.",
-                    this);
+                HUDManager.Instance?.ShowContextText(
+                    "SISTEMA SIN ENERGÍA. Restaura los 3 subsistemas de red.");
                 return;
             }
-
-            for (int i = 0; i < keys.Length; i++)
-            {
-                if (keys[i] == null)
-                {
-                    Debug.LogWarning(
-                        $"[{nameof(ConsolePuzzleController)}] Slot keys[{i}] sin asignar.", this);
-                    continue;
-                }
-                keys[i].Setup(HandleKeyPress);
-            }
+            HUDManager.Instance?.ShowContextText(_currentContextText);
         }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            _playerInTrigger = false;
+            HUDManager.Instance?.HideContextText();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Teclado
+        // ─────────────────────────────────────────────────────────────────────
 
         private void HandleKeyPress(string key)
         {
-            if (!_isActive || _isSolved || _isShowingError) return;
+            if (!_isPoweredOn) return;
+            if (!_isActive || _isSolved || _isInCooldown) return;
             if (string.IsNullOrEmpty(key)) return;
 
             if (key == ClearKey)
@@ -144,7 +237,6 @@ namespace LearnToEscape.Puzzles
                 return;
             }
 
-            // Resto: solo aceptamos un dígito por tecla.
             if (key.Length != 1 || !char.IsDigit(key[0]))
             {
                 Debug.LogWarning(
@@ -159,6 +251,10 @@ namespace LearnToEscape.Puzzles
             RefreshDisplay();
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // Evaluación del PIN y cooldown
+        // ─────────────────────────────────────────────────────────────────────
+
         private void EvaluatePin()
         {
             string expected = _data?.pin ?? string.Empty;
@@ -167,7 +263,10 @@ namespace LearnToEscape.Puzzles
             {
                 _isSolved = true;
                 _isActive = false;
-                StopErrorRoutineIfRunning();
+                StopCooldownRoutineIfRunning();
+
+                if (_playerInTrigger)
+                    HUDManager.Instance?.HideContextText();
 
                 Debug.Log(
                     $"[{nameof(ConsolePuzzleController)}] PIN correcto → OnPuzzleSolved.", this);
@@ -175,73 +274,94 @@ namespace LearnToEscape.Puzzles
                 return;
             }
 
-            // Fallo: mostramos ERROR durante un segundo y reseteamos el input.
-            StopErrorRoutineIfRunning();
+            StopCooldownRoutineIfRunning();
             _errorRoutine = StartCoroutine(ShowErrorAndClear());
         }
 
         private IEnumerator ShowErrorAndClear()
         {
-            _isShowingError = true;
+            _isInCooldown = true;
+            SetDisplayText(ErrorMessage);
 
-            if (inputDisplay != null) inputDisplay.text = ErrorMessage;
-
-            yield return new WaitForSeconds(ErrorDisplaySeconds);
+            yield return new WaitForSeconds(errorCooldownSeconds);
 
             _currentInput = string.Empty;
             RefreshDisplay();
-            _isShowingError = false;
+            _isInCooldown = false;
             _errorRoutine = null;
         }
 
-        private void StopErrorRoutineIfRunning()
+        private void StopCooldownRoutineIfRunning()
         {
             if (_errorRoutine != null)
             {
                 StopCoroutine(_errorRoutine);
                 _errorRoutine = null;
             }
-            _isShowingError = false;
+            _isInCooldown = false;
         }
 
+        // ─────────────────────────────────────────────────────────────────────
+        // Display 3D
+        // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Construye la representación visual del PIN en curso:
+        /// posiciones rellenas con el dígito (o asterisco si <see cref="maskInput"/>)
+        /// y posiciones vacías con "_". Ejemplo: "1 2 _ _".
+        /// Solo debe llamarse cuando la consola está encendida.
+        /// </summary>
         private void RefreshDisplay()
         {
-            if (inputDisplay == null)
+            if (display3DText == null)
             {
                 Debug.LogWarning(
-                    $"[{nameof(ConsolePuzzleController)}] inputDisplay sin asignar; " +
+                    $"[{nameof(ConsolePuzzleController)}] display3DText sin asignar; " +
                     "no se puede mostrar el progreso del PIN.", this);
                 return;
             }
 
-            if (string.IsNullOrEmpty(_currentInput))
+            var sb = new System.Text.StringBuilder(PinLength * 2 - 1);
+            for (int i = 0; i < PinLength; i++)
             {
-                inputDisplay.text = string.Empty;
-                return;
+                if (i > 0) sb.Append(' ');
+                if (i < _currentInput.Length)
+                    sb.Append(maskInput ? '*' : _currentInput[i]);
+                else
+                    sb.Append('_');
             }
-
-            inputDisplay.text = maskInput
-                ? new string('*', _currentInput.Length)
-                : _currentInput;
+            display3DText.text = sb.ToString();
         }
 
-        private void AssignText(TMP_Text target, string value)
+        private void SetDisplayText(string text)
         {
-            if (target == null)
-            {
-                Debug.LogWarning(
-                    $"[{nameof(ConsolePuzzleController)}] Slot TMP_Text sin asignar en el Inspector.",
-                    this);
-                return;
-            }
-            target.text = value ?? string.Empty;
+            if (display3DText == null) return;
+            display3DText.text = text;
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Lifecycle
+        // ─────────────────────────────────────────────────────────────────────
 
         private void OnDisable()
         {
-            // Si la escena se desactiva en mitad de un mensaje de error,
-            // detenemos la corrutina para no dejar estado colgado.
-            StopErrorRoutineIfRunning();
+            StopCooldownRoutineIfRunning();
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // Debug / QA
+        // ─────────────────────────────────────────────────────────────────────
+
+        [ContextMenu("Simular PowerUp")]
+        private void SimulatePowerUp()
+        {
+            if (!_isActive)
+            {
+                Debug.LogWarning(
+                    $"[{nameof(ConsolePuzzleController)}] El puzle no está activo todavía.", this);
+                return;
+            }
+            PowerUpConsole();
         }
 
         [ContextMenu("Simular Resolución")]
@@ -261,11 +381,12 @@ namespace LearnToEscape.Puzzles
                     this);
                 return;
             }
-            if (!_isActive)
+            if (!_isPoweredOn)
             {
                 Debug.LogWarning(
-                    $"[{nameof(ConsolePuzzleController)}] Simulando victoria sin activar primero " +
-                    "(se permite en modo debug).", this);
+                    $"[{nameof(ConsolePuzzleController)}] La consola está OFFLINE; " +
+                    "se fuerza PowerUp antes de simular la victoria.", this);
+                PowerUpConsole();
             }
 
             DumpChainOfThought();
@@ -275,16 +396,13 @@ namespace LearnToEscape.Puzzles
                 $"(PIN esperado: {_data.pin}).", this);
             _isSolved = true;
             _isActive = false;
-            StopErrorRoutineIfRunning();
+            StopCooldownRoutineIfRunning();
             OnPuzzleSolved?.Invoke();
         }
 
         /// <summary>
         /// Vuelca en consola el "Chain of Thought" emitido por el LLM para el
-        /// puzle 4: pregunta deductiva, razonamiento paso a paso y PIN final.
-        /// Pensado como herramienta de Game Master / QA para auditar que el
-        /// PIN se deduce realmente de los puzles 1-3 y no es un número
-        /// aleatorio. NO se invoca en el flujo normal de juego.
+        /// puzle 4. Herramienta de Game Master / QA; no se invoca en flujo normal.
         /// </summary>
         private void DumpChainOfThought()
         {

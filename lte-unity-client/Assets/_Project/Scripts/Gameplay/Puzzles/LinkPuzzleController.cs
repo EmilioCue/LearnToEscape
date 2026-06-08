@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using LearnToEscape.Content;
 using LearnToEscape.Gameplay.Puzzles;
+using LearnToEscape.UI;
 using UnityEngine;
 
 namespace LearnToEscape.Puzzles
@@ -37,6 +38,7 @@ namespace LearnToEscape.Puzzles
         [SerializeField] private LinkBay[] bays;
 
         private Puzzle3Link _data;
+        private string _contextInstruction = string.Empty;
         private bool _isActive;
         private bool _isSolved;
 
@@ -67,6 +69,8 @@ namespace LearnToEscape.Puzzles
                     this);
                 return;
             }
+
+            _contextInstruction = "Empareja cada concepto con su definición correspondiente.";
 
             PopulateSceneTexts();
             SubscribeBayEvents();
@@ -190,36 +194,27 @@ namespace LearnToEscape.Puzzles
             return true;
         }
 
+        private void OnTriggerEnter(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            HUDManager.Instance?.ShowContextText(_contextInstruction);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            HUDManager.Instance?.HideContextText();
+        }
+
         private void OnDestroy() => UnsubscribeBayEvents();
 
         [ContextMenu("Simular Resolución")]
         private void SimulateSolve()
         {
-            if (_data == null)
-            {
-                Debug.LogError(
-                    $"[{nameof(LinkPuzzleController)}] No hay datos inyectados; " +
-                    "no se puede simular la resolución.", this);
-                return;
-            }
-            if (_isSolved)
-            {
-                Debug.LogWarning(
-                    $"[{nameof(LinkPuzzleController)}] Ya resuelto; se ignora la simulación.",
-                    this);
-                return;
-            }
-            if (!_isActive)
-            {
-                Debug.LogWarning(
-                    $"[{nameof(LinkPuzzleController)}] Simulando resolución sin activar primero " +
-                    "(se permite en modo debug).", this);
-            }
-
-            Debug.Log($"[{nameof(LinkPuzzleController)}] Resolución simulada → OnPuzzleSolved.", this);
             _isSolved = true;
             _isActive = false;
             UnsubscribeBayEvents();
+            Debug.Log($"[{nameof(LinkPuzzleController)}] Resolución simulada → OnPuzzleSolved.", this);
             OnPuzzleSolved?.Invoke();
         }
     }

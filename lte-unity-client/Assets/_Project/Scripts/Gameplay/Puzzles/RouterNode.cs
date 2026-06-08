@@ -52,6 +52,11 @@ namespace LearnToEscape.Gameplay.Puzzles
         private MeshRenderer _meshRenderer;
         private TMP_Text _tmpText;
         private Color _originalColor;
+        /// <summary>
+        /// Color base del nodo para este intento (p. ej. <c>defaultColor</c> del controlador).
+        /// <see cref="ResetState"/> lo restaura tras un fallo en la secuencia.
+        /// </summary>
+        private Color _baselineColor;
 
         private void Awake()
         {
@@ -75,6 +80,8 @@ namespace LearnToEscape.Gameplay.Puzzles
                 else
                     _meshRenderer = null;
             }
+
+            _baselineColor = _originalColor;
         }
 
         /// <summary>
@@ -95,6 +102,32 @@ namespace LearnToEscape.Gameplay.Puzzles
                 Debug.LogWarning(
                     $"[{nameof(RouterNode)}] No hay TMP_Text hijo donde escribir " +
                     $"'{text}'. Asigna uno en el Inspector.", this);
+        }
+
+        /// <summary>
+        /// Fija el color “neutral” del nodo para el intento actual (coincide con
+        /// el <c>defaultColor</c> del controlador). Debe llamarse al poblar el
+        /// puzle antes o junto con el primer <see cref="SetColor"/> de feedback.
+        /// </summary>
+        public void SetBaselineColor(Color baseline)
+        {
+            _baselineColor = baseline;
+        }
+
+        /// <summary>
+        /// Restaura el aspecto al color base guardado en <see cref="_baselineColor"/>
+        /// (coincide con el estado “neutral” del puzle) y sincroniza
+        /// <see cref="_originalColor"/> para el hover.
+        /// </summary>
+        public void ResetState()
+        {
+            _originalColor = _baselineColor;
+            if (label != null)
+                label.color = _baselineColor;
+            if (_tmpText != null)
+                _tmpText.color = _baselineColor;
+            if (_meshRenderer != null)
+                _meshRenderer.material.color = _baselineColor;
         }
 
         /// <summary>

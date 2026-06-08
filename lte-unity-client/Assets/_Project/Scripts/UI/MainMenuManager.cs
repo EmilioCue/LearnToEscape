@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using LearnToEscape.Content;
-using LearnToEscape.Gameplay.Rooms;
+using LearnToEscape.Core;
 using TMPro;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace LearnToEscape.UI
@@ -26,6 +27,13 @@ namespace LearnToEscape.UI
     /// <c>UnityAction</c> síncrona. Por eso el listener real es un
     /// <c>async void</c> envoltorio (<see cref="HandleGenerateClicked"/>) que
     /// captura cualquier excepción para evitar que reviente el bucle de Unity.
+    /// </para>
+    /// <para>
+    /// Tras una generación exitosa, el <see cref="RoomData"/> se almacena en
+    /// <see cref="GameSession.CurrentRoom"/> (objeto estático que sobrevive
+    /// a la carga de escena) y se carga la escena de la sala de escape.
+    /// <see cref="LearnToEscape.Gameplay.Rooms.RoomFlowManager"/> lo recupera
+    /// en su <c>Start</c>.
     /// </para>
     /// </remarks>
     [DisallowMultipleComponent]
@@ -56,20 +64,18 @@ namespace LearnToEscape.UI
             },
         };
 
-        [Header("Referencias 3D")]
-        [Tooltip("El jugador en 3D que se activará tras generar la sala")]
-        [SerializeField] private GameObject player3D;
-
         [Header("UI")]
         [SerializeField] private TMP_Dropdown areaDropdown;
         [SerializeField] private TMP_Dropdown topicDropdown;
         [SerializeField] private Button generateButton;
         [SerializeField] private GameObject loadingPanel;
-        [SerializeField] private GameObject mainMenuCanvas;
 
         [Header("Dependencias de juego")]
-        [SerializeField] private RoomFlowManager roomManager;
         [SerializeField] private ContentGenerator contentGenerator;
+
+        [Header("Navegación de escenas")]
+        [Tooltip("Nombre de la escena de la sala de escape (debe coincidir con el Build Settings).")]
+        [SerializeField] private string escapeRoomSceneName = "SCN_EscapeRoom";
 
         [Header("Parámetros de generación")]
         [Tooltip("Número de puzles por sala. El contrato actual del backend es FIJO=4.")]
@@ -105,7 +111,6 @@ namespace LearnToEscape.UI
             ok &= AssertAssigned(areaDropdown, nameof(areaDropdown));
             ok &= AssertAssigned(topicDropdown, nameof(topicDropdown));
             ok &= AssertAssigned(generateButton, nameof(generateButton));
-            ok &= AssertAssigned(roomManager, nameof(roomManager));
             ok &= AssertAssigned(contentGenerator, nameof(contentGenerator));
             return ok;
         }
@@ -217,14 +222,12 @@ namespace LearnToEscape.UI
             }
 
             if (loadingPanel != null) loadingPanel.SetActive(false);
-            if (mainMenuCanvas != null) mainMenuCanvas.SetActive(false);
 
-            if (player3D != null)
-            {
-                player3D.SetActive(true);
-            }
-            
-            roomManager.InitializeRoom(room);
+            GameSession.CurrentRoom = room;
+            Debug.Log(
+                $"[{nameof(MainMenuManager)}] RoomData guardado en GameSession. " +
+                $"Cargando escena '{escapeRoomSceneName}'.", this);
+            SceneManager.LoadScene(escapeRoomSceneName);
         }
 
         /// <summary>

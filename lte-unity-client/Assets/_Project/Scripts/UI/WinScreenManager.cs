@@ -8,18 +8,14 @@ namespace LearnToEscape.UI
 {
     /// <summary>
     /// Pantalla de victoria: escucha <see cref="RoomFlowManager.OnRoomCompleted"/>
-    /// y muestra el panel ganador. Su botón "Reiniciar" recarga la escena
-    /// activa, lo que limpia TODO el estado en memoria (sala generada,
-    /// progreso de puzzles, posición de cámara…) y devuelve al jugador al
-    /// Menú Principal.
+    /// y muestra el panel ganador. Su botón "Reiniciar" carga explícitamente
+    /// la escena del menú principal, limpiando el estado de la sala en curso.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// La estrategia de "reset por recarga de escena" es deliberada: en este
-    /// proyecto cada sala es contenido procedural servido por el LLM, así que
-    /// no tiene sentido mantener objetos antiguos vivos. Recargar el
-    /// <c>buildIndex</c> actual es la forma más simple y robusta de garantizar
-    /// estado limpio sin tener que escribir un sistema de "rewind" manual.
+    /// El botón de reinicio carga <c>SCN_MainMenu</c> por nombre, garantizando
+    /// que el jugador vuelve al menú aunque la escena de juego no sea la de
+    /// inicio del build.
     /// </para>
     /// <para>
     /// La suscripción a <c>OnRoomCompleted</c> se hace en <see cref="Start"/>
@@ -42,7 +38,7 @@ namespace LearnToEscape.UI
         [Tooltip("Panel raíz de la pantalla de victoria. Se activa al ganar.")]
         [SerializeField] private GameObject winPanel;
 
-        [Tooltip("Botón que recarga la escena activa para volver al menú.")]
+        [Tooltip("Botón que carga SCN_MainMenu para volver al menú.")]
         [SerializeField] private Button restartButton;
 
         [Tooltip("Texto opcional dentro del winPanel; si se asigna, se " +
@@ -110,17 +106,14 @@ namespace LearnToEscape.UI
         }
 
         /// <summary>
-        /// Recarga la escena activa. Esto destruye toda la jerarquía actual
-        /// (sala generada, puzles, UI in-game) y vuelve al estado inicial,
-        /// que en esta build es el Menú Principal.
+        /// Carga la escena del menú principal, destruyendo la sala actual.
         /// </summary>
         private void HandleRestartClicked()
         {
-            int activeBuildIndex = SceneManager.GetActiveScene().buildIndex;
             Debug.Log(
-                $"[{nameof(WinScreenManager)}] Reiniciando escena (buildIndex={activeBuildIndex}).",
+                $"[{nameof(WinScreenManager)}] Volviendo al menú principal (SCN_MainMenu).",
                 this);
-            SceneManager.LoadScene(activeBuildIndex);
+            SceneManager.LoadScene("SCN_MainMenu");
         }
     }
 }

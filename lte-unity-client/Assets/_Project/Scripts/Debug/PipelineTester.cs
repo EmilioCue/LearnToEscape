@@ -1,6 +1,8 @@
 using System;
 using LearnToEscape.Content;
+using LearnToEscape.Core;
 using LearnToEscape.Gameplay.Rooms;
+using LearnToEscape.Puzzles;
 using UnityEngine;
 
 public class PipelineTester : MonoBehaviour
@@ -45,11 +47,45 @@ public class PipelineTester : MonoBehaviour
             string pin = result.puzzle4_console?.pin ?? "?";
             Debug.Log($"Puzzle 4 (console): PIN={pin}");
 
-            FindFirstObjectByType<RoomFlowManager>()?.InitializeRoom(result);
+            GameSession.CurrentRoom = result;
+            TryInitializeRoomFlow();
         }
         catch (Exception e)
         {
             Debug.LogError($"<color=red>TEST FALLIDO:</color> {e.Message}\n{e.StackTrace}");
         }
+    }
+
+    /// <summary>
+    /// Tras generar datos, delega en <see cref="RoomFlowManager.SetPuzzlesAndInitialize"/>
+    /// si los puzles ya están instanciados en escena (p. ej. por <c>TGridGenerator</c>).
+    /// </summary>
+    private static void TryInitializeRoomFlow()
+    {
+        var flow = RoomFlowManager.Instance ?? FindFirstObjectByType<RoomFlowManager>();
+        if (flow == null)
+        {
+            Debug.LogWarning(
+                "<color=yellow>[Tester]</color> No hay RoomFlowManager en escena. " +
+                "Los datos quedaron en GameSession.CurrentRoom para la próxima carga.");
+            return;
+        }
+
+        var matrix = FindFirstObjectByType<MatrixPuzzleController>();
+        var router = FindFirstObjectByType<RouterPuzzleController>();
+        var link = FindFirstObjectByType<LinkPuzzleController>();
+        var console = FindFirstObjectByType<ConsolePuzzleController>();
+
+        if (matrix == null || router == null || link == null || console == null)
+        {
+            Debug.LogWarning(
+                "<color=yellow>[Tester]</color> No se encontraron los 4 controladores en escena. " +
+                "Asegúrate de que TGridGenerator ya instanció los prefabs, o recarga la escena " +
+                "con GameSession.CurrentRoom asignado.");
+            return;
+        }
+
+        flow.SetPuzzlesAndInitialize(matrix, router, link, console);
+        Debug.Log("<color=green>[Tester]</color> RoomFlowManager inicializado con datos generados.");
     }
 }

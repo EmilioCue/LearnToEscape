@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using LearnToEscape.Content;
 using LearnToEscape.Gameplay.Puzzles;
+using LearnToEscape.UI;
 using UnityEngine;
 
 namespace LearnToEscape.Puzzles
@@ -42,6 +43,7 @@ namespace LearnToEscape.Puzzles
         [SerializeField] private Color wrongColor = Color.red;
 
         private Puzzle2Router _data;
+        private string _contextInstruction = string.Empty;
         private bool _isActive;
         private bool _isSolved;
         private int _currentExpectedIndex;
@@ -71,6 +73,8 @@ namespace LearnToEscape.Puzzles
                     this);
                 return;
             }
+
+            _contextInstruction = "Ordena los elementos en la secuencia lógica correcta.";
 
             PopulateSceneTexts();
             _isActive = true;
@@ -113,6 +117,7 @@ namespace LearnToEscape.Puzzles
                     continue;
                 }
                 nodes[i].Setup(pairs[i].correctIndex, pairs[i].text, OnNodeClicked);
+                nodes[i].SetBaselineColor(defaultColor);
                 nodes[i].SetColor(defaultColor);
             }
 
@@ -126,6 +131,19 @@ namespace LearnToEscape.Puzzles
                     $"{_data.sequence.Length} pasos pero solo hay " +
                     $"{nodes.Length} nodos visuales; se descartan los sobrantes.",
                     this);
+            }
+        }
+
+        /// <summary>
+        /// Devuelve todos los nodos asignados al color base del intento actual.
+        /// </summary>
+        private void ResetAllNodes()
+        {
+            if (nodes == null) return;
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                if (nodes[i] != null)
+                    nodes[i].ResetState();
             }
         }
 
@@ -150,45 +168,30 @@ namespace LearnToEscape.Puzzles
             }
             else
             {
-                // Marcamos brevemente el nodo equivocado y reseteamos el resto.
-                // El siguiente clic correcto lo repintará a defaultColor vía progreso.
+                ResetAllNodes();
                 clickedNode.SetColor(wrongColor);
-                for (int i = 0; i < nodes.Length; i++)
-                {
-                    if (nodes[i] != null && nodes[i] != clickedNode)
-                        nodes[i].SetColor(defaultColor);
-                }
                 _currentExpectedIndex = 0;
             }
+        }
+
+        private void OnTriggerEnter(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            HUDManager.Instance?.ShowContextText(_contextInstruction);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
+            HUDManager.Instance?.HideContextText();
         }
 
         [ContextMenu("Simular Resolución")]
         private void SimulateSolve()
         {
-            if (_data == null)
-            {
-                Debug.LogError(
-                    $"[{nameof(RouterPuzzleController)}] No hay datos inyectados; " +
-                    "no se puede simular la resolución.", this);
-                return;
-            }
-            if (_isSolved)
-            {
-                Debug.LogWarning(
-                    $"[{nameof(RouterPuzzleController)}] Ya resuelto; se ignora la simulación.",
-                    this);
-                return;
-            }
-            if (!_isActive)
-            {
-                Debug.LogWarning(
-                    $"[{nameof(RouterPuzzleController)}] Simulando resolución sin activar primero " +
-                    "(se permite en modo debug).", this);
-            }
-
-            Debug.Log($"[{nameof(RouterPuzzleController)}] Resolución simulada → OnPuzzleSolved.", this);
             _isSolved = true;
             _isActive = false;
+            Debug.Log($"[{nameof(RouterPuzzleController)}] Resolución simulada → OnPuzzleSolved.", this);
             OnPuzzleSolved?.Invoke();
         }
     }

@@ -1,5 +1,6 @@
 using DG.Tweening;
 using LearnToEscape.Gameplay.Interaction;
+using LearnToEscape.UI;
 using TMPro;
 using UnityEngine;
 
@@ -20,8 +21,10 @@ namespace LearnToEscape.Gameplay.Puzzles
     /// </list>
     /// </para>
     /// <para>
-    /// <b>Física</b>: el <see cref="Rigidbody"/> es cinemático en todo momento.
-    /// El <see cref="Collider"/> se <b>desactiva durante el agarre</b> para evitar
+    /// <b>Física</b>: el <see cref="Rigidbody"/> arranca con gravedad activa
+    /// (<see cref="InitializeItem"/>). Al recoger pasa a cinemático; al soltar
+    /// se restaura la gravedad. El
+    /// <see cref="Collider"/> se <b>desactiva durante el agarre</b> para evitar
     /// que el ítem (pegado al holdPoint de la cámara) choque con el
     /// <c>CharacterController</c> del jugador y lo lance por el aire.
     /// Unity dispara <c>OnTriggerExit</c> al desactivar el collider dentro de un
@@ -53,6 +56,8 @@ namespace LearnToEscape.Gameplay.Puzzles
         /// <inheritdoc />
         public bool IsHeld { get; private set; }
 
+        private string _conceptName = string.Empty;
+
         private Rigidbody _rb;
         private Collider _col;
         private MeshRenderer _meshRenderer;
@@ -64,9 +69,6 @@ namespace LearnToEscape.Gameplay.Puzzles
         private void Awake()
         {
             _rb = GetComponent<Rigidbody>();
-            _rb.isKinematic = true;
-            _rb.useGravity = false;
-
             _col = GetComponent<Collider>();
 
             _tmpText = null;
@@ -100,7 +102,7 @@ namespace LearnToEscape.Gameplay.Puzzles
         // ------------------------------------------------------------------ //
 
         /// <summary>
-        /// Configura el ítem con su categoría correcta y el nombre visible.
+        /// Configura el ítem con su categoría correcta y el nombre visible en el label 3D.
         /// Debe llamarse una vez desde el controlador antes de activar el puzle.
         /// </summary>
         public void Setup(int categoryIndex, string itemName)
@@ -113,6 +115,21 @@ namespace LearnToEscape.Gameplay.Puzzles
                 Debug.LogWarning(
                     $"[{nameof(DraggableMatrixItem)}] No hay TMP_Text hijo donde " +
                     $"escribir '{itemName}'. Asigna uno en el Inspector.", this);
+        }
+
+        /// <summary>
+        /// Registra el nombre del concepto que se mostrará en el HUD global
+        /// cuando el jugador apunte a este ítem con el raycast.
+        /// </summary>
+        public void InitializeItem(string conceptName)
+        {
+            _conceptName = conceptName ?? string.Empty;
+
+            if (TryGetComponent<Rigidbody>(out var rb))
+            {
+                rb.isKinematic = false;
+                rb.useGravity = true;
+            }
         }
 
         /// <summary>
@@ -139,6 +156,7 @@ namespace LearnToEscape.Gameplay.Puzzles
                 _tmpText.color = hoverColor;
             if (_meshRenderer != null)
                 _meshRenderer.material.color = hoverColor;
+            HUDManager.Instance?.ShowContextText(_conceptName);
         }
 
         /// <inheritdoc />
@@ -148,6 +166,7 @@ namespace LearnToEscape.Gameplay.Puzzles
                 _tmpText.color = _originalColor;
             if (_meshRenderer != null)
                 _meshRenderer.material.color = _originalColor;
+            HUDManager.Instance?.HideContextText();
         }
 
         /// <inheritdoc />
@@ -174,6 +193,9 @@ namespace LearnToEscape.Gameplay.Puzzles
         {
             IsHeld = true;
 
+            _rb.isKinematic = true;
+            _rb.useGravity = false;
+
             // Desactivar el collider mientras viaja pegado al holdPoint: evita que
             // empuje el CharacterController y salga volando. Unity dispara
             // OnTriggerExit en las MatrixDropZone al desactivarlo, limpiando el estado.
@@ -194,6 +216,9 @@ namespace LearnToEscape.Gameplay.Puzzles
         private void Release()
         {
             IsHeld = false;
+
+            _rb.isKinematic = false;
+            _rb.useGravity = true;
 
             // Reactivar el collider al soltar: si el ítem está dentro de una
             // MatrixDropZone Unity disparará OnTriggerEnter automáticamente.

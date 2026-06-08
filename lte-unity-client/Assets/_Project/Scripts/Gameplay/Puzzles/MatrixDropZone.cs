@@ -9,6 +9,7 @@ namespace LearnToEscape.Gameplay.Puzzles
     /// <summary>
     /// Zona de caída del puzle 1 (Matrix): un área con trigger que rastrea
     /// qué <see cref="DraggableMatrixItem"/> contiene en cada momento.
+    /// Muestra el nombre de su categoría en un texto físico montado en la pared.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -27,9 +28,8 @@ namespace LearnToEscape.Gameplay.Puzzles
     public class MatrixDropZone : MonoBehaviour
     {
         [Header("Visual")]
-        [Tooltip("TextMeshPro hijo donde se escribe el nombre de la categoría. " +
-                 "Si se deja vacío, se busca automáticamente en los hijos.")]
-        [SerializeField] private TMP_Text label;
+        [Tooltip("TextMeshPro del cartel físico en la pared donde se escribe el nombre de la categoría.")]
+        [SerializeField] private TMP_Text categoryWallText;
 
         [Header("Snap (DOTween)")]
         [Tooltip("Punto al que se animará magnéticamente el ítem al soltarse " +
@@ -49,6 +49,8 @@ namespace LearnToEscape.Gameplay.Puzzles
         /// </summary>
         public event Action OnContentsChanged;
 
+        private string _categoryName = string.Empty;
+
         private readonly HashSet<DraggableMatrixItem> _itemsInside = new();
 
         /// <summary>Vista de solo lectura de los ítems actualmente dentro de la zona.</summary>
@@ -59,8 +61,6 @@ namespace LearnToEscape.Gameplay.Puzzles
 
         private void Awake()
         {
-            if (label == null) label = GetComponentInChildren<TMP_Text>(true);
-
             var col = GetComponent<Collider>();
             if (!col.isTrigger)
             {
@@ -73,18 +73,29 @@ namespace LearnToEscape.Gameplay.Puzzles
 
         /// <summary>
         /// Configura la zona con su índice y el nombre de la categoría.
+        /// Actualiza el cartel físico de pared si está asignado.
         /// Debe llamarse desde el controlador antes de activar el puzle.
         /// </summary>
         public void Setup(int categoryIndex, string categoryName)
         {
             ZoneCategoryIndex = categoryIndex;
+            SetCategoryName(categoryName);
+        }
 
-            if (label != null)
-                label.text = categoryName ?? string.Empty;
+        /// <summary>
+        /// Asigna el nombre de categoría y lo escribe en el cartel físico de pared.
+        /// Se llama automáticamente desde <see cref="Setup"/>.
+        /// </summary>
+        public void SetCategoryName(string name)
+        {
+            _categoryName = name ?? string.Empty;
+
+            if (categoryWallText != null)
+                categoryWallText.text = _categoryName;
             else
                 Debug.LogWarning(
-                    $"[{nameof(MatrixDropZone)}] No hay TMP_Text hijo donde escribir " +
-                    $"'{categoryName}'. Asigna uno en el Inspector.", this);
+                    $"[{nameof(MatrixDropZone)}] categoryWallText no asignado en '{gameObject.name}'. " +
+                    "Asigna el TMP_Text del cartel de pared en el Inspector.", this);
         }
 
         private void OnTriggerEnter(Collider other)

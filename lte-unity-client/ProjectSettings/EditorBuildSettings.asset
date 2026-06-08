@@ -5,12 +5,21 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/_Project/Scenes/MainMenu.unity
     guid: 5244a63e76baf0142b97d61dfa9b770f
-  - enabled: 1
+  - enabled: 0
     path: Assets/_Project/Scenes/Game.unity
     guid: 7d5246b5ffcd55b48b069abe9a7fe0b6
+  - enabled: 0
+    path: Assets/_Project/Scenes/Sandbox_Pipeline.unity
+    guid: f53b50c0bde07d349ab6469648e77ab3
+  - enabled: 1
+    path: Assets/_Project/Scenes/SCN_MainMenu.unity
+    guid: c786910530e9a6c4980d86b78865d715
+  - enabled: 1
+    path: Assets/_Project/Scenes/SCN_EscapeRoom.unity
+    guid: cc95048ad17519a4ea0d684f48dc9a4c
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
